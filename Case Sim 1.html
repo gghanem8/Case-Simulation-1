@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Medical Case Simulator – Pulmonary Embolism</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background:#f4f7f9;
+    margin:0;
+    padding:0;
+    color:#333;
+}
+.container {
+    max-width: 1000px;
+    margin: 30px auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+}
+h1, h2, h3 {
+    color:#2e7d32;
+}
+input[type="text"] {
+    width:100%;
+    padding:10px;
+    margin:10px 0;
+    border-radius:5px;
+    border:1px solid #ccc;
+}
+.test-list {
+    max-height:300px;
+    overflow-y:auto;
+    border:1px solid #ccc;
+    padding:10px;
+}
+label {
+    display:block;
+    margin-bottom:5px;
+}
+button {
+    margin-top:20px;
+    padding:12px 20px;
+    background:#2e7d32;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+}
+button:hover { background:#256428; }
+.hidden { display:none; }
+table {
+    width:100%;
+    border-collapse:collapse;
+    margin-top:15px;
+}
+th, td {
+    border:1px solid #ddd;
+    padding:8px;
+}
+th { background:#f0f0f0; }
+.good { color:green; }
+.warn { color:orange; }
+.bad { color:red; }
+.summary {
+    background:#eef6ff;
+    padding:15px;
+    border-radius:5px;
+    margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>Medical Case Simulator</h1>
+
+<h2>Case Presentation</h2>
+<p>
+A 73-year-old man with no significant past medical history presents to the emergency department
+with <strong>shortness of breath and pleuritic chest pain</strong>.  
+Two weeks ago he suffered a fall and has had significant difficulty ambulating since, spending
+most of his time resting in bed and missing work.
+</p>
+
+<h3>Order Diagnostic Tests</h3>
+<p><em>Costs are hidden until submission.</em></p>
+
+<input type="text" id="search" placeholder="Search diagnostic tests...">
+
+<form id="orderForm">
+<div class="test-list" id="testList"></div>
+<button type="submit">Submit Orders</button>
+</form>
+
+<div id="results" class="hidden">
+
+<h2>Results</h2>
+<p><strong>Final Diagnosis:</strong> Pulmonary Embolism</p>
+
+<h3>Your Orders</h3>
+<div id="orderFeedback"></div>
+
+<h3>Recommended Diagnostic Pathway</h3>
+<div class="summary">
+<strong>Step 1: Rule out other life-threatening causes of chest pain</strong>
+<ul>
+<li>EKG</li>
+<li>Troponin</li>
+<li>Chest X-ray</li>
+<li>Pulse oximetry</li>
+<li>CBC / BMP</li>
+</ul>
+
+<strong>Step 2: Assess PE risk</strong>
+<ul>
+<li>Recent immobilization</li>
+<li>Age</li>
+<li>Pleuritic chest pain + dyspnea</li>
+</ul>
+
+<strong>Step 3: Definitive testing</strong>
+<ul>
+<li><strong>CTA Chest – PE protocol</strong></li>
+</ul>
+</div>
+
+<h3>Pathway Comparison</h3>
+<table>
+<tr>
+<th></th>
+<th>Your Pathway</th>
+<th>Recommended Pathway</th>
+</tr>
+<tr>
+<td>Baseline chest pain workup</td>
+<td id="studentBase"></td>
+<td>EKG, Troponin, CXR</td>
+</tr>
+<tr>
+<td>Definitive PE imaging</td>
+<td id="studentCTA"></td>
+<td>CTA Chest (PE protocol)</td>
+</tr>
+<tr>
+<td>Total diagnostic cost</td>
+<td id="studentCost"></td>
+<td>$4,500 (approx.)</td>
+</tr>
+</table>
+
+</div>
+
+</div>
+
+<script>
+// Diagnostic tests (curated, realistic)
+const tests = {
+    "EKG": {cost:125, appropriate:true, base:true},
+    "Troponin": {cost:140, appropriate:true, base:true},
+    "CBC": {cost:85, appropriate:true, base:true},
+    "BMP": {cost:90, appropriate:true, base:true},
+    "Chest X-ray": {cost:400, appropriate:true, base:true},
+    "Pulse oximetry": {cost:401, appropriate:true, base:true},
+
+    "D-dimer": {cost:120, appropriate:true},
+    "ABG": {cost:66, appropriate:true},
+    "BNP": {cost:110, appropriate:true},
+
+    "CTA Chest – PE protocol": {cost:3859, appropriate:true, definitive:true},
+    "CT Chest w/ contrast": {cost:3405, appropriate:false},
+    "CT Chest w/o contrast": {cost:3213, appropriate:false},
+    "Lower extremity venous Doppler": {cost:450, appropriate:true},
+    "Echocardiogram": {cost:869, appropriate:true},
+
+    "CT Head": {cost:2495, appropriate:false},
+    "CT Abdomen/Pelvis": {cost:4826, appropriate:false}
+};
+
+// Populate test list
+const testList = document.getElementById("testList");
+function render(filter="") {
+    testList.innerHTML="";
+    Object.keys(tests)
+        .filter(t=>t.toLowerCase().includes(filter.toLowerCase()))
+        .forEach(t=>{
+            testList.innerHTML +=
+            `<label><input type="checkbox" value="${t}"> ${t}</label>`;
+        });
+}
+render();
+
+document.getElementById("search").addEventListener("input", e=>render(e.target.value));
+
+document.getElementById("orderForm").addEventListener("submit", e=>{
+    e.preventDefault();
+    const selected=[...document.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+    if(selected.length===0){ alert("Please select at least one test."); return; }
+
+    let total=0, html="<ul>";
+    let base=false, cta=false;
+
+    selected.forEach(t=>{
+        const test=tests[t];
+        total+=test.cost;
+        if(test.base) base=true;
+        if(test.definitive) cta=true;
+
+        let cls=test.appropriate?"good":"bad";
+        let tag=test.appropriate?"✅ Appropriate":"❌ Low-value";
+        html+=`<li class="${cls}">${t} – ${tag} – $${test.cost}</li>`;
+    });
+
+    html+=`</ul><p><strong>Total Cost:</strong> $${total}</p>`;
+    document.getElementById("orderFeedback").innerHTML=html;
+
+    document.getElementById("studentBase").innerText = base ? "Completed" : "Incomplete";
+    document.getElementById("studentCTA").innerText = cta ? "Yes" : "No";
+    document.getElementById("studentCost").innerText = "$"+total;
+
+    document.getElementById("results").classList.remove("hidden");
+});
+</script>
+
+</body>
+</html>
